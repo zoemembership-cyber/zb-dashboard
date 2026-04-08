@@ -589,12 +589,20 @@ async function loadData() {
         if(name||email) unknownResponders.push(r);
       }
     });
-    renderDashboard();
-    renderAssignment();
+    safeRender('renderDashboard');
+    safeRender('renderAssignment');
     document.getElementById('last-updated').textContent='Updated: '+new Date().toLocaleTimeString()+' · '+rows.length+' responses';
   } catch(e) {
-    document.getElementById('last-updated').textContent='Could not load — check connection.';
+    console.error('loadData error:', e);
+    document.getElementById('last-updated').textContent='Could not load data — check that the Google Sheet is published.';
+    // Still render with empty data so UI is usable
+    safeRender('renderDashboard');
+    safeRender('renderAssignment');
   }
+}
+
+function safeRender(fnName) {
+  try { window[fnName](); } catch(e) { console.error(fnName+' failed:', e); }
 }
 
 // ── View switching ────────────────────────────────────────
@@ -610,30 +618,37 @@ function switchView(view, btn) {
 // DASHBOARD LOGIC
 // ══════════════════════════════════
 function renderDashboard() {
-  const submittedEmails=new Set();
-  responses.forEach(r=>{const m=matchToMaster(r);if(m)submittedEmails.add(m.email);});
-  const pending=MASTER.filter(m=>!submittedEmails.has(m.email));
-  const depositConfirmed=responses.filter(r=>(r['Have you paid your $400 security deposit?']||'').includes('already paid')).length;
-  const esaCount=responses.filter(r=>(r['Do you have or plan to have an ESA or pet in your room?']||'').toLowerCase().includes('yes')).length;
+  try {
+    const submittedEmails=new Set();
+    responses.forEach(r=>{const m=matchToMaster(r);if(m)submittedEmails.add(m.email);});
+    const pending=MASTER.filter(m=>!submittedEmails.has(m.email));
+    const depositConfirmed=responses.filter(r=>(r['Have you paid your $400 security deposit?']||'').includes('already paid')).length;
+    const esaCount=responses.filter(r=>(r['Do you have or plan to have an ESA or pet in your room?']||'').toLowerCase().includes('yes')).length;
 
-  document.getElementById('stat-total').textContent=MASTER.length;
-  document.getElementById('stat-submitted').textContent=responses.length;
-  document.getElementById('stat-pending').textContent=pending.length;
-  document.getElementById('stat-deposit').textContent=depositConfirmed;
-  document.getElementById('stat-esa').textContent=esaCount;
+    document.getElementById('stat-total').textContent=MASTER.length;
+    document.getElementById('stat-submitted').textContent=responses.length;
+    document.getElementById('stat-pending').textContent=pending.length;
+    document.getElementById('stat-deposit').textContent=depositConfirmed;
+    document.getElementById('stat-esa').textContent=esaCount;
 
-  // Update new badge
-  const badge=document.getElementById('new-badge');
-  if(unknownResponders.length>0){badge.textContent=unknownResponders.length;badge.style.display='inline';}
-  else{badge.style.display='none';}
+    const badge=document.getElementById('new-badge');
+    if(badge){
+      if(unknownResponders.length>0){badge.textContent=unknownResponders.length;badge.style.display='inline';}
+      else{badge.style.display='none';}
+    }
 
-  renderOverview(pending,depositConfirmed);
-  renderResponseCards(submittedEmails);
-  renderPending(pending);
-  renderNewResponders();
-  renderFlags();
-  renderInterests();
-  renderMatchingGroups();
+    try{renderOverview(pending,depositConfirmed);}catch(e){document.getElementById('page-overview').innerHTML=errCard('Overview',e);}
+    try{renderResponseCards(submittedEmails);}catch(e){document.getElementById('responses-grid').innerHTML=errCard('Responses',e);}
+    try{renderPending(pending);}catch(e){document.getElementById('page-pending').innerHTML=errCard('Pending',e);}
+    try{renderNewResponders();}catch(e){const el=document.getElementById('page-new_responders');if(el)el.innerHTML=errCard('New',e);}
+    try{renderFlags();}catch(e){document.getElementById('page-flags').innerHTML=errCard('Flags',e);}
+    try{renderInterests();}catch(e){document.getElementById('page-interests').innerHTML=errCard('Interests',e);}
+    try{renderMatchingGroups();}catch(e){document.getElementById('page-matching_db').innerHTML=errCard('Matching',e);}
+  } catch(e) { console.error('renderDashboard failed:', e); }
+}
+
+function errCard(section, e) {
+  return `<div class="card" style="color:var(--red)">Could not render ${section}: ${e.message}</div>`;
 }
 
 function renderOverview(pending,depositConfirmed) {
@@ -989,21 +1004,23 @@ function getRoomConflicts(roomId) {
 }
 
 function renderAssignment() {
-  const saved=localStorage.getItem('zb-assignments');
-  if(saved){try{assignments=JSON.parse(saved);}catch(e){assignments={};}}
-  MASTER.forEach(m=>{
-    if(m.defaultRoom&&!Object.values(assignments).flat().includes(m.id)){
-      if(!assignments[m.defaultRoom])assignments[m.defaultRoom]=[];
-      const room=BUILDING.flatMap(f=>f.rooms).find(r=>r.id===m.defaultRoom);
-      const cap=CAPACITY[room?.type||'double'];
-      if(assignments[m.defaultRoom].length<cap)assignments[m.defaultRoom].push(m.id);
-    }
-  });
-  renderResidentList();
-  renderBuilding();
-  updateHeader();
-  renderAAlerts();
-  renderSummary();
+  try {
+    const saved=localStorage.getItem('zb-assignments');
+    if(saved){try{assignments=JSON.parse(saved);}catch(e){assignments={};}}
+    MASTER.forEach(m=>{
+      if(m.defaultRoom&&!Object.values(assignments).flat().includes(m.id)){
+        if(!assignments[m.defaultRoom])assignments[m.defaultRoom]=[];
+        const room=BUILDING.flatMap(f=>f.rooms).find(r=>r.id===m.defaultRoom);
+        const cap=CAPACITY[room?.type||'double'];
+        if(assignments[m.defaultRoom].length<cap)assignments[m.defaultRoom].push(m.id);
+      }
+    });
+    try{renderResidentList();}catch(e){console.error('renderResidentList:',e);}
+    try{renderBuilding();}catch(e){console.error('renderBuilding:',e);}
+    try{updateHeader();}catch(e){console.error('updateHeader:',e);}
+    try{renderAAlerts();}catch(e){console.error('renderAAlerts:',e);}
+    try{renderSummary();}catch(e){console.error('renderSummary:',e);}
+  } catch(e){console.error('renderAssignment failed:',e);}
 }
 
 function renderResidentList() {
